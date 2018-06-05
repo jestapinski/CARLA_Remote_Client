@@ -6,16 +6,19 @@ The main Python file to be used as middleware is `use_case_controller.py`, which
 
 This simulation is meant to run on a static IP, customizable in `use_case_controller.py`.
 
-Here is a table of conventions for the initial client to communicate with the server:
+A GET request can be used to test communication with the server, or with a POST request with the text `testmsg` as the payload.
 
-| Car Control         | Text to be Sent (as POST request) |
-|---------------------|-----------------------------------|
-| Start Carla Server  | startserver                       |
-| Enable Autopilot    | enable_ap                         |
-| Start New Level     | reset                             |
-| Steer Left          | left                              |
-| Steer Right         | right                             |
-| Switch into Reverse | reverse                           |
-| Accelerate          | forward                           |
-| Slow Down           | backward                          |
-| Engage Hand Break   | stop                              |
+Here is a table of conventions for the initial client to communicate with the server via POST requests:
+
+| Car Control                          | Text to be Sent (as POST request) |
+|--------------------------------------|-----------------------------------|
+| Test Connection (Prints Server Side) | testmsg                           |
+| Start Carla Server                   | startserver                       |
+| Enable Autopilot                     | enable_ap                         |
+| Start New Level                      | reset                             |
+| Steer Left                           | left                              |
+| Steer Right                          | right                             |
+| Switch into Reverse                  | reverse                           |
+| Accelerate                           | forward                           |
+| Slow Down                            | backward                          |
+| Engage Hand Break                    | stop                              |
