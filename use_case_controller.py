@@ -254,6 +254,8 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
             game.accelerate()
         if content == 'backward':
             game.decelerate()
+        if content == 'stop':
+            game.throw_brake()
 
 
 def run():
