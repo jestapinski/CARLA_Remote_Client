@@ -47,27 +47,6 @@ def make_carla_settings(args):
         QualityLevel=QUALITY_LEVEL)
     return settings
 
-
-# class Timer(object):
-#     def __init__(self):
-#         self.step = 0
-#         self._lap_step = 0
-#         self._lap_time = time.time()
-
-#     def tick(self):
-#         self.step += 1
-
-#     def lap(self):
-#         self._lap_step = self.step
-#         self._lap_time = time.time()
-
-#     def ticks_per_second(self):
-#         return float(self.step - self._lap_step) / self.elapsed_seconds_since_lap()
-
-#     def elapsed_seconds_since_lap(self):
-#         return time.time() - self._lap_time
-
-
 class CarlaGame(object):
     def __init__(self, carla_client, args):
         self.client = carla_client
@@ -151,7 +130,12 @@ class CarlaGame(object):
         self.client.send_control(control)
 
     def add_left(self):
-        self.enabled_commands.append(self.steer_left)
+        if self.steer_left not in self.enabled_commands:
+            self.enabled_commands.append(self.steer_left)
+
+    def remove_left(self):
+        if self.steer_left in self.enabled_commands:
+            self.enabled_commands.remove(self.steer_left)
 
 # Right Turning
     def steer_right(self):
@@ -161,7 +145,12 @@ class CarlaGame(object):
         self.client.send_control(control)
 
     def add_right(self):
-        self.enabled_commands.append(self.steer_right)
+        if self.steer_right not in self.enabled_commands:
+            self.enabled_commands.append(self.steer_right)
+
+    def remove_right(self):
+        if self.steer_right in self.enabled_commands:
+            self.enabled_commands.remove(self.steer_right)
 
 # Reverse
     def trigger_reverse(self):
@@ -169,7 +158,12 @@ class CarlaGame(object):
 
 # Acceleration
     def add_accel(self):
-        self.enabled_commands.append(self.accelerate)
+        if self.accelerate not in self.enabled_commands:
+            self.enabled_commands.append(self.accelerate)
+
+    def remove_accel(self):
+        if self.accelerate in self.enabled_commands:
+            self.enabled_commands.remove(self.accelerate)
 
     def accelerate(self):
         control = VehicleControl()
@@ -179,7 +173,12 @@ class CarlaGame(object):
 
 # Deceleration
     def add_decel(self):
-        self.enabled_commands.append(self.decelerate)
+        if self.decelerate not in self.enabled_commands:
+            self.enabled_commands.append(self.decelerate)
+
+    def remove_decel(self):
+        if self.decelerate in self.enabled_commands:
+            self.enabled_commands.remove(self.decelerate)
 
     def decelerate(self):
         control = VehicleControl()
@@ -188,7 +187,7 @@ class CarlaGame(object):
         self.client.send_control(control)
 
 # Braking
-    def addBrake(self):
+    def add_brake(self):
         self.enabled_commands = [self.throw_brake]
 
     def throw_brake(self):
@@ -254,6 +253,12 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
     def __init__(self, request, client_address, server):
         super().__init__(request, client_address, server)
 
+    def do_OPTIONS(self):           
+        self.send_response(200, "ok")       
+        self.send_header('Access-Control-Allow-Origin', '*')                
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header("Access-Control-Allow-Headers", "X-Requested-With")
+        self.end_headers() 
  
   # GET
     def do_GET(self):
@@ -279,6 +284,7 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
         print(content)
         self.send_response(200)
         self.send_header('Content-type','text/html')
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         # Send message back to client to help in completing transaction
         message = "POST!"
@@ -295,14 +301,22 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
             game.trigger_reset()
         if content == 'left': #DONE
             game.add_left()
+        if content == 'left_stop': #DONE
+            game.remove_left()
         if content == 'right': #DONE
             game.add_right()
+        if content == 'right_stop': #DONE
+            game.remove_right()
         if content == 'reverse': #DONE
             game.trigger_reverse()
         if content == 'forward':
             game.add_accel()
+        if content == 'forward_stop':
+            game.remove_accel()
         if content == 'backward':
             game.add_decel()
+        if content == 'backward_stop':
+            game.remove_decel()
         if content == 'stop':
             game.add_brake()
         # ADD CLEAR

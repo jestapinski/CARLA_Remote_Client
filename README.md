@@ -22,3 +22,5 @@ Here is a table of conventions for the initial client to communicate with the se
 | Accelerate                           | forward                           |
 | Slow Down                            | backward                          |
 | Engage Hand Break                    | stop                              |
+
+*For all of these cardinal direction controls, there is a `_stop` variant which cancels the existing option*. For example, `left_stop` will stop the car from continuing to turn left.
