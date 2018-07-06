@@ -29,7 +29,7 @@ exports.start_secondary_screen_server = ->
     content = req.url[1..] # Getting the passed command
 
     # Case on content
-    switch (content){
+    switch content
       when 'reset' then runReset()
       when 'left' then beginShiftingLeft()
       when 'left_stop' then stopShiftingLeft()
@@ -40,10 +40,6 @@ exports.start_secondary_screen_server = ->
       when 'slow_down' then startSlowingDown()
       when 'slow_down_stop' then stopSlowingDown()
       when 'stop' then stop()
-    }
-    if content === 'left':
-      beginShiftingLeft()
-    if content
 
     data = 'Got Your Message\n'
     res.writeHead OK_RESPONSE,
