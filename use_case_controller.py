@@ -41,7 +41,7 @@ MAP_NAME = 'Town01'
 
 # Target Framer Secondary Screen IP
 SECONDARY_IP = ''
-SECONDARY_PORT = 8079
+SECONDARY_PORT = 3000
 SECONDARY_SCREEN_COMMANDS = {
   'reset': 'reset',
   'left': 'left',
@@ -61,8 +61,8 @@ def make_carla_settings(args):
   settings.set(
       SynchronousMode=False,
       SendNonPlayerAgentsInfo=True,
-      NumberOfVehicles=15,
-      NumberOfPedestrians=30,
+      NumberOfVehicles=3,
+      NumberOfPedestrians=3,
       WeatherId=random.choice([1, 3, 7, 8, 14]),
       QualityLevel=QUALITY_LEVEL)
   return settings
@@ -79,6 +79,11 @@ class CarlaGame(object):
     self._map = CarlaMap(self._city_name, 0.1643, 50.0) if self._city_name is not None else None
     self.measurements = None
     self.enabled_commands = []
+    self.vehicle_distance_threshold = 30
+    self.traffic_light_distance_threshold = 15
+    self.pedestrian_distance_threshold = 10
+    self.speed_limit_distance_threshold = 20
+    self.lane_tolerance = 0.00002
 
   def execute(self):
     self._initialize_game()
@@ -105,24 +110,90 @@ class CarlaGame(object):
 
 # Callback function to be run continuously throughout the game
 
-  def _on_loop(self):
-    self.measurements, sensor_data = self.client.read_data()
+  def distance_between(self, car_position, agent_position):
+    import math
+    (car_x, car_y, car_z) = car_position
+    (agent_x, agent_y, agent_z) = agent_position
+    sum_x_2 = (agent_x - car_x) ** 2
+    sum_y_2 = (agent_y - car_y) ** 2
+    sum_z_2 = (agent_z - car_z) ** 2
+    return math.sqrt(sum_x_2 + sum_y_2 + sum_z_2)
 
+  def too_close_to(self, field, distance_threshold):
     # Set the player position
     if self._city_name is not None:
       measurements = self.measurements
-      self._position = self._map.convert_to_pixel([
+      car_position = (measurements.player_measurements.transform.location.x,
+        measurements.player_measurements.transform.location.y,
+        measurements.player_measurements.transform.location.z)
+      self._agent_positions = measurements.non_player_agents
+
+    for agent in self.measurements.non_player_agents:
+      if agent.HasField(field):
+        agent_position = (getattr(agent, field).transform.location.x,
+          getattr(agent, field).transform.location.y,
+          getattr(agent, field).transform.location.z)
+        if self.distance_between(car_position, agent_position) < distance_threshold:
+          print(field)
+          return True
+    return False
+
+  def moving_out_of_lane(self):
+    # Lane Position (horizontal)
+    measurements = self.measurements
+    # Get the position of the car, in the X direction, in terms of sin(its angle)
+    lane_orientation = self._map.get_lane_orientation([
         measurements.player_measurements.transform.location.x,
         measurements.player_measurements.transform.location.y,
         measurements.player_measurements.transform.location.z])
-      self._agent_positions = measurements.non_player_agents
+    # print(lane_orientation)
+    if abs(lane_orientation[0]) > 1 - self.lane_tolerance:
+      return False
+    if abs(lane_orientation[1]) > 1 - self.lane_tolerance:
+      return False
+    return True
+
+
+  def _on_loop(self):
+    self.measurements, sensor_data = self.client.read_data()
+
+    # Control
+    if self.too_close_to('speed_limit_sign', self.speed_limit_distance_threshold):
+      # Just send socket to secondary monitor
+      pass
+
+    if self.too_close_to('traffic_light', self.traffic_light_distance_threshold):
+      # Send socket to secondary monitor
+      # Let the car drive through the intersection
+      self.client.send_control(self.measurements.player_measurements.autopilot_control)
+      return
+
+    if self.too_close_to('pedestrian', self.pedestrian_distance_threshold):
+      # Send socket to secondary monitor
+      # Let the car stop and wait
+      self.client.send_control(self.measurements.player_measurements.autopilot_control)
+      return
 
     number_of_commands = len(self.enabled_commands)
     if self._enable_autopilot and number_of_commands == 0:
       self.client.send_control(self.measurements.player_measurements.autopilot_control)
     # else:
+
+    lane_position_alert = self.moving_out_of_lane()
     if (number_of_commands > 0):
       for command in self.enabled_commands:
+        # if (self.too_close_to('vehicle', self.vehicle_distance_threshold) and
+        #     (command == self.accelerate)):
+        #   # Send socket to secondary monitor based on vehicle positioning
+        #   continue
+        if lane_position_alert and command == self.steer_left:
+          # Send socket to secondary monitor based on lane positioning
+          # Don't allow lane position change
+          continue
+        if lane_position_alert and command == self.steer_right:
+          # Send socket to secondary monitor based on lane positioning
+          # Don't allow lane position change
+          continue
         command()
 
 # Interface Functions
@@ -141,12 +212,13 @@ class CarlaGame(object):
 # Left turning
   def steer_left(self):
     control = VehicleControl()
-    control.steer = min(control.steer - 0.001, -1.0)
+    control.steer = max(control.steer - 0.01, -0.05)
     control.reverse = self._is_on_reverse
+    control.throttle = self.measurements.player_measurements.autopilot_control.throttle
     self.client.send_control(control)
 
   def add_left(self):
-    if self.steer_left not in self.enabled_commands:
+    if self.steer_left not in self.enabled_commands and not(self.moving_out_of_lane()):
       self.enabled_commands.append(self.steer_left)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['left'])
 
@@ -158,12 +230,14 @@ class CarlaGame(object):
 # Right Turning
   def steer_right(self):
     control = VehicleControl()
-    control.steer = max(control.steer + 0.001, 1.0)
+    control.steer = min(control.steer + 0.01, 0.05)
+    print(control.steer)
     control.reverse = self._is_on_reverse
+    control.throttle = self.measurements.player_measurements.autopilot_control.throttle
     self.client.send_control(control)
 
   def add_right(self):
-    if self.steer_right not in self.enabled_commands:
+    if self.steer_right not in self.enabled_commands and not(self.moving_out_of_lane()):
       self.enabled_commands.append(self.steer_right)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['right'])
 
@@ -190,6 +264,8 @@ class CarlaGame(object):
   def accelerate(self):
     control = VehicleControl()
     control.throttle = 1.0
+    if (self.too_close_to('vehicle', self.vehicle_distance_threshold)):
+      control.throttle = self.measurements.player_measurements.autopilot_control.throttle
     control.reverse = self._is_on_reverse
     self.client.send_control(control) 
 
@@ -206,7 +282,7 @@ class CarlaGame(object):
 
   def decelerate(self):
     control = VehicleControl()
-    control.brake = 1.0
+    control.brake = 0.5
     control.reverse = self._is_on_reverse
     self.client.send_control(control)
 
@@ -274,7 +350,7 @@ def main(obj):
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 def send_framer_message(msg):
-  r = requests.get(SECONDARY_IP + ':' + SECONDARY_PORT, data={'msg': msg})
+  r = requests.get('http://localhost' + ':' + str(SECONDARY_PORT) + '/' + msg, data={'msg': msg})
   print(r.status_code, r.reason)
  
 # HTTPRequestHandler class
