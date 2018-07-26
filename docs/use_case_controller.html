@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html;charset=utf-8">
+  <title>use_case_controller.py</title>
+  <link rel="stylesheet" href="pycco.css">
+</head>
+<body>
+<div id='container'>
+  <div id="background"></div>
+  <div class='section'>
+    <div class='docs'><h1>use_case_controller.py</h1></div>
+  </div>
+  <div class='clearall'>
+  <div class='section' id='section-0'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-0'>#</a>
+      </div>
+      
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span></span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-1'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-1'>#</a>
+      </div>
+      <p>Based off of Keyboard Input Framework from UAB
+Copyright (c) 2017 Computer Vision Center (CVC) at the Universitat Autonoma de
+Barcelona (UAB).</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-2'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-2'>#</a>
+      </div>
+      <p>Extension by Jordan Stapinski, to allow incoming HTTP connections to provide
+remote control to the vehicle, allowing for cross-language control from
+remote devices, implementing a customized protocol</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-3'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-3'>#</a>
+      </div>
+      <p>This file is meant to be run with a CARLA driving simulator on <code>--carla-server</code> mode</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">_thread</span>
+<span class="kn">import</span> <span class="nn">requests</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-4'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-4'>#</a>
+      </div>
+      <h3><span id="carla-python-api" href="carla-python-api"> CARLA Python API </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-5'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-5'>#</a>
+      </div>
+      <p>The CARLA API found in <code>carla/</code> outlines the needed functions for interacting
+with the car based on a given map</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="kn">from</span> <span class="nn">carla</span> <span class="kn">import</span> <span class="n">image_converter</span>
+<span class="kn">from</span> <span class="nn">carla</span> <span class="kn">import</span> <span class="n">sensor</span>
+<span class="kn">from</span> <span class="nn">carla.client</span> <span class="kn">import</span> <span class="n">make_carla_client</span><span class="p">,</span> <span class="n">VehicleControl</span>
+<span class="kn">from</span> <span class="nn">carla.planner.map</span> <span class="kn">import</span> <span class="n">CarlaMap</span>
+<span class="kn">from</span> <span class="nn">carla.settings</span> <span class="kn">import</span> <span class="n">CarlaSettings</span>
+<span class="kn">from</span> <span class="nn">carla.tcp</span> <span class="kn">import</span> <span class="n">TCPConnectionError</span>
+<span class="kn">from</span> <span class="nn">carla.util</span> <span class="kn">import</span> <span class="n">print_over_same_line</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-6'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-6'>#</a>
+      </div>
+      <p>Import HTTP server modules for Framer to connect to</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="kn">from</span> <span class="nn">http.server</span> <span class="kn">import</span> <span class="n">BaseHTTPRequestHandler</span><span class="p">,</span> <span class="n">HTTPServer</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-7'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-7'>#</a>
+      </div>
+      <p>global game instance to be used</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="n">game</span> <span class="o">=</span> <span class="bp">None</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-8'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-8'>#</a>
+      </div>
+      <p>The IP of this machine, for others to connect to if need be. This is where the
+HTTP server is set</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="n">THIS_IP</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+<span class="n">THIS_PORT</span> <span class="o">=</span> <span class="mi">8080</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-9'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-9'>#</a>
+      </div>
+      <p>IP of the CARLA server machine</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="n">REMOTE_IP</span> <span class="o">=</span> <span class="s1">&#39;172.25.2.19&#39;</span>
+<span class="n">REMOTE_PORT</span> <span class="o">=</span> <span class="mi">2000</span>
+<span class="n">LATENCY_MEASURE</span> <span class="o">=</span> <span class="mi">1000</span> <span class="c1"># Number of pings to get the message across</span>
+<span class="n">QUALITY_LEVEL</span> <span class="o">=</span> <span class="s1">&#39;Epic&#39;</span>
+<span class="n">MAP_NAME</span> <span class="o">=</span> <span class="s1">&#39;Town01&#39;</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-10'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-10'>#</a>
+      </div>
+      <p>IP of the Express server to be used for the secondary screen</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="n">SECONDARY_IP</span> <span class="o">=</span> <span class="s1">&#39;172.25.3.97&#39;</span>
+<span class="n">SECONDARY_PORT</span> <span class="o">=</span> <span class="mi">3000</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-11'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-11'>#</a>
+      </div>
+      <p>Explicit language of commands to be sent to the Express server
+(converts HTTP to the socket message)</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="n">SECONDARY_SCREEN_COMMANDS</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s1">&#39;reset&#39;</span><span class="p">:</span> <span class="s1">&#39;reset&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;left&#39;</span><span class="p">:</span> <span class="s1">&#39;left&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;left_stop&#39;</span><span class="p">:</span> <span class="s1">&#39;left_stop&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;right&#39;</span><span class="p">:</span> <span class="s1">&#39;right&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;right_stop&#39;</span><span class="p">:</span> <span class="s1">&#39;right_stop&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;speed_up&#39;</span><span class="p">:</span> <span class="s1">&#39;speed_up&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;speed_up_stop&#39;</span><span class="p">:</span> <span class="s1">&#39;speed_up_stop&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;slow_down&#39;</span><span class="p">:</span> <span class="s1">&#39;slow_down&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;slow_down_stop&#39;</span><span class="p">:</span> <span class="s1">&#39;slow_down_stop&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;stop&#39;</span><span class="p">:</span> <span class="s1">&#39;stop&#39;</span>
+<span class="p">}</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-12'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-12'>#</a>
+      </div>
+      <p>Make a CarlaSettings object with the settings we need.
+Sets exactly three vehicles and pedestrians, with random weather conditions.</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="k">def</span> <span class="nf">make_carla_settings</span><span class="p">():</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-13'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-13'>#</a>
+      </div>
+      
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="n">settings</span> <span class="o">=</span> <span class="n">CarlaSettings</span><span class="p">()</span>
+  <span class="n">settings</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+      <span class="n">SynchronousMode</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+      <span class="n">SendNonPlayerAgentsInfo</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+      <span class="n">NumberOfVehicles</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+      <span class="n">NumberOfPedestrians</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+      <span class="n">WeatherId</span><span class="o">=</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">14</span><span class="p">]),</span>
+      <span class="n">QualityLevel</span><span class="o">=</span><span class="n">QUALITY_LEVEL</span><span class="p">)</span>
+  <span class="k">return</span> <span class="n">settings</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-14'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-14'>#</a>
+      </div>
+      <h1>Model for the CARLA Simulation Game</h1>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="k">class</span> <span class="nc">CarlaGame</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-15'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-15'>#</a>
+      </div>
+      <p>Initialize all of the parameters to keep track of the state of the CARLA simulation.
+Note most of the params here have to do with the map (hardcoded to be map01 up top).</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">carla_client</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-16'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-16'>#</a>
+      </div>
+      
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">carla_client</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_carla_settings</span> <span class="o">=</span> <span class="n">make_carla_settings</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_enable_autopilot</span> <span class="o">=</span> <span class="bp">True</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_city_name</span> <span class="o">=</span> <span class="n">MAP_NAME</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_position</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_agent_positions</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_map</span> <span class="o">=</span> <span class="n">CarlaMap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_city_name</span><span class="p">,</span> <span class="mf">0.1643</span><span class="p">,</span> <span class="mf">50.0</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_city_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="k">else</span> <span class="bp">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">measurements</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">vehicle_distance_threshold</span> <span class="o">=</span> <span class="mi">30</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">traffic_light_distance_threshold</span> <span class="o">=</span> <span class="mi">30</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">pedestrian_distance_threshold</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">speed_limit_distance_threshold</span> <span class="o">=</span> <span class="mi">20</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lane_tolerance</span> <span class="o">=</span> <span class="mf">0.00002</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-17'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-17'>#</a>
+      </div>
+      <h3><span id="execute" href="execute"> execute </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-18'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-18'>#</a>
+      </div>
+      <p>Setup a new instance of the CARLA simulation and then continuously loop to
+control how the car drives</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="bp">self</span><span class="o">.</span><span class="n">_initialize_game</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+      <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_loop</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+      <span class="k">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-19'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-19'>#</a>
+      </div>
+      <h3><span id="_initialize_game" href="_initialize_game"> _initialize_game </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">_initialize_game</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-20'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-20'>#</a>
+      </div>
+      <p>Wrapper around events to happen when the simulation begins</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="bp">self</span><span class="o">.</span><span class="n">_on_new_episode</span><span class="p">()</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-21'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-21'>#</a>
+      </div>
+      <h3><span id="_on_new_episode" href="_on_new_episode"> _on_new_episode </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">_on_new_episode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-22'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-22'>#</a>
+      </div>
+      <p>Function that restarts the game and sets the car in a specific spot</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="n">player_start</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Starting new episode...&#39;</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">start_episode</span><span class="p">(</span><span class="n">player_start</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span> <span class="o">=</span> <span class="bp">False</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-23'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-23'>#</a>
+      </div>
+      <p><strong>Enabled Commands</strong>
+This list stores the commands the user has sent to the car, which is then acted upon
+in the on_loop function, after checking against driving rules.</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span> <span class="o">=</span> <span class="p">[]</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-24'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-24'>#</a>
+      </div>
+      <h3><span id="distance_between" href="distance_between"> distance_between </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">distance_between</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">car_position</span><span class="p">,</span> <span class="n">agent_position</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-25'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-25'>#</a>
+      </div>
+      <p>Simple algorithm for checking 3D distance between two objects.
+  Used to check the position of the car against various other objects.</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="kn">import</span> <span class="nn">math</span>
+    <span class="p">(</span><span class="n">car_x</span><span class="p">,</span> <span class="n">car_y</span><span class="p">,</span> <span class="n">car_z</span><span class="p">)</span> <span class="o">=</span> <span class="n">car_position</span>
+    <span class="p">(</span><span class="n">agent_x</span><span class="p">,</span> <span class="n">agent_y</span><span class="p">,</span> <span class="n">agent_z</span><span class="p">)</span> <span class="o">=</span> <span class="n">agent_position</span>
+    <span class="n">sum_x_2</span> <span class="o">=</span> <span class="p">(</span><span class="n">agent_x</span> <span class="o">-</span> <span class="n">car_x</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="n">sum_y_2</span> <span class="o">=</span> <span class="p">(</span><span class="n">agent_y</span> <span class="o">-</span> <span class="n">car_y</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="n">sum_z_2</span> <span class="o">=</span> <span class="p">(</span><span class="n">agent_z</span> <span class="o">-</span> <span class="n">car_z</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sum_x_2</span> <span class="o">+</span> <span class="n">sum_y_2</span> <span class="o">+</span> <span class="n">sum_z_2</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-26'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-26'>#</a>
+      </div>
+      <h3><span id="too_close_to" href="too_close_to"> too_close_to </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">too_close_to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">distance_threshold</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-27'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-27'>#</a>
+      </div>
+      <p>Generic helper function which decides if the car position is too close to some type
+of object, <code>field</code> (within a <code>distance_threshold</code>).</p>
+<p>Set the player position</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_city_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+      <span class="n">measurements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurements</span>
+      <span class="k">if</span> <span class="n">measurements</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">False</span>
+      <span class="n">car_position</span> <span class="o">=</span> <span class="p">(</span><span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">location</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
+        <span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">location</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
+        <span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">location</span><span class="o">.</span><span class="n">z</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">_agent_positions</span> <span class="o">=</span> <span class="n">measurements</span><span class="o">.</span><span class="n">non_player_agents</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-28'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-28'>#</a>
+      </div>
+      <p>Iterate through the obstacles in the scene and check the ones of the class
+we care about (traffic lights, vehicles, pedestrians, etc.)</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="k">for</span> <span class="n">agent</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="o">.</span><span class="n">non_player_agents</span><span class="p">:</span>
+      <span class="k">if</span> <span class="n">agent</span><span class="o">.</span><span class="n">HasField</span><span class="p">(</span><span class="n">field</span><span class="p">):</span>
+        <span class="n">agent_position</span> <span class="o">=</span> <span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">location</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
+          <span class="nb">getattr</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">location</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
+          <span class="nb">getattr</span><span class="p">(</span><span class="n">agent</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">transform</span><span class="o">.</span><span class="n">location</span><span class="o">.</span><span class="n">z</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_between</span><span class="p">(</span><span class="n">car_position</span><span class="p">,</span> <span class="n">agent_position</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">distance_threshold</span><span class="p">:</span>
+          <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="bp">False</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-29'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-29'>#</a>
+      </div>
+      <h3><span id="moving_out_of_lane" href="moving_out_of_lane"> moving_out_of_lane </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">moving_out_of_lane</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-30'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-30'>#</a>
+      </div>
+      <p>Future function to critically check lane position (horizontal)</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="k">return</span> <span class="bp">False</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-31'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-31'>#</a>
+      </div>
+      <h3><span id="_on_loop" href="_on_loop"> _on_loop </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">_on_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-32'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-32'>#</a>
+      </div>
+      <p>A function that constantly runs and checks the car against oncoming obstacles before
+executing either autonomous driving or driving influenced by a human controller</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="p">,</span> <span class="n">sensor_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">read_data</span><span class="p">()</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">too_close_to</span><span class="p">(</span><span class="s1">&#39;speed_limit_sign&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">speed_limit_distance_threshold</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-33'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-33'>#</a>
+      </div>
+      <p>Just send socket to secondary monitor here. Functionality for future work.</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="k">pass</span>
+
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">too_close_to</span><span class="p">(</span><span class="s1">&#39;traffic_light&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">traffic_light_distance_threshold</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-34'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-34'>#</a>
+      </div>
+      <p>Send socket to secondary monitor. Functionality for future work.
+Let the car drive through the intersection</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">autopilot_control</span><span class="p">)</span>
+      <span class="k">return</span>
+
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">too_close_to</span><span class="p">(</span><span class="s1">&#39;pedestrian&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pedestrian_distance_threshold</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-35'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-35'>#</a>
+      </div>
+      <p>Send socket to secondary monitor. Functionality for future work.
+Let the car stop and wait</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">autopilot_control</span><span class="p">)</span>
+      <span class="k">return</span>
+
+    <span class="n">number_of_commands</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enable_autopilot</span> <span class="ow">and</span> <span class="n">number_of_commands</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">autopilot_control</span><span class="p">)</span>
+
+    <span class="n">lane_position_alert</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">moving_out_of_lane</span><span class="p">()</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">number_of_commands</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">):</span>
+      <span class="k">for</span> <span class="n">command</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-36'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-36'>#</a>
+      </div>
+      <p>Send socket to secondary monitor based on vehicle positioning</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">too_close_to</span><span class="p">(</span><span class="s1">&#39;vehicle&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">vehicle_distance_threshold</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="p">(</span><span class="n">command</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">accelerate</span><span class="p">)):</span>
+          <span class="k">continue</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-37'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-37'>#</a>
+      </div>
+      <p>Send socket to secondary monitor based on lane positioning
+Don&rsquo;t allow lane position change</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>        <span class="k">if</span> <span class="n">lane_position_alert</span> <span class="ow">and</span> <span class="n">command</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">steer_left</span><span class="p">:</span>
+          <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">lane_position_alert</span> <span class="ow">and</span> <span class="n">command</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">steer_right</span><span class="p">:</span>
+          <span class="k">continue</span>
+        <span class="n">command</span><span class="p">()</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-38'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-38'>#</a>
+      </div>
+      <h1>CARLA Interface Functions</h1>
+<p>The following functions control the car based on the POST payload</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-39'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-39'>#</a>
+      </div>
+      <h3><span id="autopilot" href="autopilot"> Autopilot </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">trigger_ap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_enable_autopilot</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enable_autopilot</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-40'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-40'>#</a>
+      </div>
+      <h3><span id="reset" href="reset"> Reset </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">trigger_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_on_new_episode</span><span class="p">()</span>
+    <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;reset&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-41'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-41'>#</a>
+      </div>
+      <h3><span id="turn-left" href="turn-left"> Turn Left </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">steer_left</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">VehicleControl</span><span class="p">()</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">steer</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">control</span><span class="o">.</span><span class="n">steer</span> <span class="o">-</span> <span class="mf">0.01</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.05</span><span class="p">)</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">reverse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">throttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">autopilot_control</span><span class="o">.</span><span class="n">throttle</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="n">control</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-42'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-42'>#</a>
+      </div>
+      <h3><span id="add-left-turn-to-enabled_commands" href="add-left-turn-to-enabled_commands"> Add left turn to enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">add_left</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">steer_left</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">steer_left</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;left&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-43'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-43'>#</a>
+      </div>
+      <h3><span id="remove-left-turn-from-enabled_commands" href="remove-left-turn-from-enabled_commands"> Remove left turn from enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">remove_left</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">steer_left</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">steer_left</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;left_stop&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-44'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-44'>#</a>
+      </div>
+      <h3><span id="turn-right" href="turn-right"> Turn Right </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">steer_right</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">VehicleControl</span><span class="p">()</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">steer</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">control</span><span class="o">.</span><span class="n">steer</span> <span class="o">+</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">)</span>
+    <span class="k">print</span><span class="p">(</span><span class="n">control</span><span class="o">.</span><span class="n">steer</span><span class="p">)</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">reverse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">throttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">autopilot_control</span><span class="o">.</span><span class="n">throttle</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="n">control</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-45'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-45'>#</a>
+      </div>
+      <h3><span id="add-right-turn-to-enabled_commands" href="add-right-turn-to-enabled_commands"> Add right turn to enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">add_right</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">steer_right</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">steer_right</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;right&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-46'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-46'>#</a>
+      </div>
+      <h3><span id="remove-right-turn-from-enabled_commands" href="remove-right-turn-from-enabled_commands"> Remove right turn from enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">remove_right</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">steer_right</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">steer_right</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;right_stop&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-47'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-47'>#</a>
+      </div>
+      <h3><span id="reverse" href="reverse"> Reverse </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">trigger_reverse</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-48'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-48'>#</a>
+      </div>
+      <h3><span id="add-accelerate-to-enabled_commands" href="add-accelerate-to-enabled_commands"> Add accelerate to enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">add_accel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">accelerate</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">accelerate</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;speed_up&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-49'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-49'>#</a>
+      </div>
+      <h3><span id="remove-accelerate-from-enabled_commands" href="remove-accelerate-from-enabled_commands"> Remove accelerate from enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">remove_accel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">accelerate</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">accelerate</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;speed_up_stop&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-50'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-50'>#</a>
+      </div>
+      <h3><span id="accelerate" href="accelerate"> Accelerate </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">accelerate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">VehicleControl</span><span class="p">()</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">throttle</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">too_close_to</span><span class="p">(</span><span class="s1">&#39;vehicle&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">vehicle_distance_threshold</span><span class="p">)):</span>
+      <span class="n">control</span><span class="o">.</span><span class="n">throttle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurements</span><span class="o">.</span><span class="n">player_measurements</span><span class="o">.</span><span class="n">autopilot_control</span><span class="o">.</span><span class="n">throttle</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">reverse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="n">control</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-51'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-51'>#</a>
+      </div>
+      <h3><span id="add-decelerate-to-enabled_commands" href="add-decelerate-to-enabled_commands"> Add decelerate to enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">add_decel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decelerate</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">decelerate</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;slow_down&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-52'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-52'>#</a>
+      </div>
+      <h3><span id="remove-decelerate-from-enabled_commands" href="remove-decelerate-from-enabled_commands"> Remove decelerate from enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">remove_decel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decelerate</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">decelerate</span><span class="p">)</span>
+      <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;slow_down_stop&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-53'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-53'>#</a>
+      </div>
+      <h3><span id="decelerate" href="decelerate"> Decelerate </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">decelerate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">VehicleControl</span><span class="p">()</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">brake</span> <span class="o">=</span> <span class="mf">0.5</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">reverse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_on_reverse</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="n">control</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-54'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-54'>#</a>
+      </div>
+      <h3><span id="add-brake-to-enabled_commands" href="add-brake-to-enabled_commands"> Add brake to enabled_commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">add_brake</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">throw_brake</span><span class="p">]</span>
+    <span class="n">send_framer_message</span><span class="p">(</span><span class="n">SECONDARY_SCREEN_COMMANDS</span><span class="p">[</span><span class="s1">&#39;stop&#39;</span><span class="p">])</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-55'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-55'>#</a>
+      </div>
+      <h3><span id="brake" href="brake"> Brake </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">throw_brake</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">control</span> <span class="o">=</span> <span class="n">VehicleControl</span><span class="p">()</span>
+    <span class="n">control</span><span class="o">.</span><span class="n">hand_brake</span> <span class="o">=</span> <span class="bp">True</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">send_control</span><span class="p">(</span><span class="n">control</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-56'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-56'>#</a>
+      </div>
+      <h3><span id="clear-out-all-queued-commands" href="clear-out-all-queued-commands"> Clear out all queued commands </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">enabled_commands</span> <span class="o">=</span> <span class="p">[]</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-57'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-57'>#</a>
+      </div>
+      <h3><span id="main-function-for-carla-simulator-instance-to-begin" href="main-function-for-carla-simulator-instance-to-begin"> Main function for CARLA simulator instance to begin </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-58'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-58'>#</a>
+      </div>
+      <p>Take in some optional arguments for configuring the simulator network settings
+ (specifically where the simulator should be listening for incoming connections
+ from Framer)</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="n">argparser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;CARLA Manual Control Client&#39;</span><span class="p">)</span>
+    <span class="n">argparser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s1">&#39;-v&#39;</span><span class="p">,</span> <span class="s1">&#39;--verbose&#39;</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="s1">&#39;debug&#39;</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;print debug information&#39;</span><span class="p">)</span>
+    <span class="n">argparser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s1">&#39;--host&#39;</span><span class="p">,</span>
+        <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;H&#39;</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">REMOTE_IP</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;IP of the host server (default: localhost)&#39;</span><span class="p">)</span>
+    <span class="n">argparser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s1">&#39;-p&#39;</span><span class="p">,</span> <span class="s1">&#39;--port&#39;</span><span class="p">,</span>
+        <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;P&#39;</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="n">REMOTE_PORT</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;TCP port to listen to (default: 2000)&#39;</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">argparser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+    <span class="n">log_level</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">debug</span> <span class="k">else</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">format</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%(levelname)s</span><span class="s1">: </span><span class="si">%(message)s</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">log_level</span><span class="p">)</span>
+
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;listening to server </span><span class="si">%s</span><span class="s1">:</span><span class="si">%s</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-59'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-59'>#</a>
+      </div>
+      <p>Construct server here
+When we get a response then start client</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>            <span class="k">print</span><span class="p">(</span><span class="s2">&quot;trying server&quot;</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="n">make_carla_client</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">))</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-60'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-60'>#</a>
+      </div>
+      <p>Construct an instance of the CARLA simulator and save it to a global (threading)</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>            <span class="k">with</span> <span class="n">make_carla_client</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+                <span class="k">global</span> <span class="n">game</span>
+                <span class="n">game</span> <span class="o">=</span> <span class="n">CarlaGame</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+                <span class="k">print</span><span class="p">(</span><span class="s2">&quot;execute&quot;</span><span class="p">)</span>
+                <span class="n">game</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+                <span class="k">break</span>
+
+        <span class="k">except</span> <span class="n">TCPConnectionError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">)</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-61'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-61'>#</a>
+      </div>
+      <h3><span id="send_framer_message" href="send_framer_message"> send_framer_message </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="k">def</span> <span class="nf">send_framer_message</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-62'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-62'>#</a>
+      </div>
+      <p>A generic function to take a message to be sent as a socket via express and create a GET request
+to the secondary monitor server</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;http://&#39;</span> <span class="o">+</span> <span class="n">SECONDARY_IP</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">SECONDARY_PORT</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="n">msg</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;msg&#39;</span><span class="p">:</span> <span class="n">msg</span><span class="p">})</span>
+  <span class="k">print</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">reason</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-63'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-63'>#</a>
+      </div>
+      <h1>HTTP Server Class</h1>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="k">class</span> <span class="nc">testHTTPServer_RequestHandler</span><span class="p">(</span><span class="n">BaseHTTPRequestHandler</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-64'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-64'>#</a>
+      </div>
+      <p>A basic HTTP server handling incoming commands via POST request payloads, and then controlling
+the autonomous vehicle in CARLA</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">client_address</span><span class="p">,</span> <span class="n">server</span><span class="p">):</span>
+      <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">client_address</span><span class="p">,</span> <span class="n">server</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-65'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-65'>#</a>
+      </div>
+      <p>Additional Header from Coffeescript AJAX calls</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="k">def</span> <span class="nf">do_OPTIONS</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>           
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_response</span><span class="p">(</span><span class="mi">200</span><span class="p">,</span> <span class="s2">&quot;ok&quot;</span><span class="p">)</span>       
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="s1">&#39;Access-Control-Allow-Origin&#39;</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">)</span>                
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="s1">&#39;Access-Control-Allow-Methods&#39;</span><span class="p">,</span> <span class="s1">&#39;GET, POST, OPTIONS&#39;</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="s2">&quot;Access-Control-Allow-Headers&quot;</span><span class="p">,</span> <span class="s2">&quot;X-Requested-With&quot;</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">end_headers</span><span class="p">()</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-66'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-66'>#</a>
+      </div>
+      <h3><span id="handling-get-requests-(testing)" href="handling-get-requests-(testing)"> Handling GET Requests (testing) </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="k">def</span> <span class="nf">do_GET</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-67'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-67'>#</a>
+      </div>
+      <p>Send response status code</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="k">print</span><span class="p">(</span><span class="s2">&quot;connection!&quot;</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_response</span><span class="p">(</span><span class="mi">200</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-68'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-68'>#</a>
+      </div>
+      <p>Send headers</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="bp">self</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="s1">&#39;Content-type&#39;</span><span class="p">,</span><span class="s1">&#39;text/html&#39;</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">end_headers</span><span class="p">()</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-69'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-69'>#</a>
+      </div>
+      <p>Send message back to client</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="n">message</span> <span class="o">=</span> <span class="s2">&quot;Connection Successful!&quot;</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-70'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-70'>#</a>
+      </div>
+      <p>Write content as utf-8 data</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="bp">self</span><span class="o">.</span><span class="n">wfile</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="s2">&quot;utf8&quot;</span><span class="p">))</span>
+      <span class="k">return</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-71'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-71'>#</a>
+      </div>
+      <h3><span id="handling-post-requests-(car-control)" href="handling-post-requests-(car-control)"> Handling POST Requests (Car Control) </span></h3>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>    <span class="k">def</span> <span class="nf">do_POST</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+      <span class="n">content_length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s1">&#39;Content-Length&#39;</span><span class="p">])</span> <span class="c1"># Gets the size of data</span>
+      <span class="n">post_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rfile</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">content_length</span><span class="p">)</span> <span class="c1"># Gets the data itself</span>
+      <span class="n">content</span> <span class="o">=</span> <span class="n">post_data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span> 
+      <span class="k">print</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_response</span><span class="p">(</span><span class="mi">200</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="s1">&#39;Content-type&#39;</span><span class="p">,</span><span class="s1">&#39;text/html&#39;</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="s1">&#39;Access-Control-Allow-Origin&#39;</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">end_headers</span><span class="p">()</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-72'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-72'>#</a>
+      </div>
+      <p>Send message back to client to complete transaction</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="n">message</span> <span class="o">=</span> <span class="s2">&quot;POST!&quot;</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-73'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-73'>#</a>
+      </div>
+      <p>Write content as utf-8 data</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="bp">self</span><span class="o">.</span><span class="n">wfile</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="s2">&quot;utf8&quot;</span><span class="p">))</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-74'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-74'>#</a>
+      </div>
+      <p>Case on POST payloads to figure out what command to send to the car</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;testmsg&#39;</span><span class="p">:</span>
+          <span class="k">print</span><span class="p">(</span><span class="s2">&quot;testing connection successful&quot;</span><span class="p">)</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;startserver&#39;</span><span class="p">:</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-75'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-75'>#</a>
+      </div>
+      <p>Dispatch a thread to start a new game instance and save globally</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>          <span class="n">_thread</span><span class="o">.</span><span class="n">start_new_thread</span><span class="p">(</span><span class="n">main</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="p">,))</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;enable_ap&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">trigger_ap</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;reset&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">trigger_reset</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;left&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">add_left</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;left_stop&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">remove_left</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;right&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">add_right</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;right_stop&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">remove_right</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;reverse&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">trigger_reverse</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;forward&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">add_accel</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;forward_stop&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">remove_accel</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;backward&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">add_decel</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;backward_stop&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">remove_decel</span><span class="p">()</span>
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;stop&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">add_brake</span><span class="p">()</span>      
+      <span class="k">if</span> <span class="n">content</span> <span class="o">==</span> <span class="s1">&#39;clear&#39;</span><span class="p">:</span>
+          <span class="n">game</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+      <span class="k">print</span><span class="p">(</span><span class="s2">&quot;sending Response&quot;</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-76'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-76'>#</a>
+      </div>
+      
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre><span class="k">def</span> <span class="nf">run</span><span class="p">():</span>
+  <span class="k">print</span><span class="p">(</span><span class="s1">&#39;starting server...&#39;</span><span class="p">)</span></pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+  <div class='section' id='section-77'>
+    <div class='docs'>
+      <div class='octowrap'>
+        <a class='octothorpe' href='#section-77'>#</a>
+      </div>
+      <p>Server settings</p>
+    </div>
+    <div class='code'>
+      <div class="highlight"><pre>  <span class="n">server_address</span> <span class="o">=</span> <span class="p">(</span><span class="n">THIS_IP</span><span class="p">,</span> <span class="n">THIS_PORT</span><span class="p">)</span>
+  <span class="n">httpd</span> <span class="o">=</span> <span class="n">HTTPServer</span><span class="p">(</span><span class="n">server_address</span><span class="p">,</span> <span class="n">testHTTPServer_RequestHandler</span><span class="p">)</span>
+  <span class="k">print</span><span class="p">(</span><span class="s1">&#39;running server...&#39;</span><span class="p">,</span> <span class="n">httpd</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">getsockname</span><span class="p">())</span>
+  <span class="k">print</span><span class="p">(</span><span class="n">httpd</span><span class="p">)</span>
+  <span class="n">httpd</span><span class="o">.</span><span class="n">serve_forever</span><span class="p">()</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">run</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+        <span class="k">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">Cancelled by user. Bye!&#39;</span><span class="p">)</span>
+
+</pre></div>
+    </div>
+  </div>
+  <div class='clearall'></div>
+</div>
+</body>

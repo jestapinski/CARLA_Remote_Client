@@ -8,6 +8,8 @@
 # remote control to the vehicle, allowing for cross-language control from
 # remote devices, implementing a customized protocol
 
+# This file is meant to be run with a CARLA driving simulator on `--carla-server` mode
+
 from __future__ import print_function
 
 import argparse
@@ -17,6 +19,13 @@ import time
 import _thread
 import requests
 
+# === CARLA Python API ===
+
+"""
+The CARLA API found in `carla/` outlines the needed functions for interacting
+with the car based on a given map
+"""
+
 from carla import image_converter
 from carla import sensor
 from carla.client import make_carla_client, VehicleControl
@@ -25,23 +34,30 @@ from carla.settings import CarlaSettings
 from carla.tcp import TCPConnectionError
 from carla.util import print_over_same_line
 
+# Import HTTP server modules for Framer to connect to
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 # global game instance to be used
 game = None
 
-# Default '' refers to '0.0.0.0', or this machine's public IP
+# The IP of this machine, for others to connect to if need be. This is where the
+# HTTP server is set
 THIS_IP = ''
 THIS_PORT = 8080
 
-# Target CARLA Machine IP
+# IP of the CARLA server machine
 REMOTE_IP = '172.25.2.19'
 REMOTE_PORT = 2000
 LATENCY_MEASURE = 1000 # Number of pings to get the message across
 QUALITY_LEVEL = 'Epic'
 MAP_NAME = 'Town01'
 
-# Target Framer Secondary Screen IP
-SECONDARY_IP = ''
+# IP of the Express server to be used for the secondary screen
+SECONDARY_IP = '172.25.3.97'
 SECONDARY_PORT = 3000
+
+# Explicit language of commands to be sent to the Express server
+# (converts HTTP to the socket message)
 SECONDARY_SCREEN_COMMANDS = {
   'reset': 'reset',
   'left': 'left',
@@ -55,8 +71,11 @@ SECONDARY_SCREEN_COMMANDS = {
   'stop': 'stop'
 }
 
-def make_carla_settings(args):
-  """Make a CarlaSettings object with the settings we need."""
+def make_carla_settings():
+  """
+  Make a CarlaSettings object with the settings we need.
+  Sets exactly three vehicles and pedestrians, with random weather conditions.
+  """
   settings = CarlaSettings()
   settings.set(
       SynchronousMode=False,
@@ -67,10 +86,15 @@ def make_carla_settings(args):
       QualityLevel=QUALITY_LEVEL)
   return settings
 
+## Model for the CARLA Simulation Game
 class CarlaGame(object):
   def __init__(self, carla_client, args):
+    """
+    Initialize all of the parameters to keep track of the state of the CARLA simulation.
+    Note most of the params here have to do with the map (hardcoded to be map01 up top).
+    """
     self.client = carla_client
-    self._carla_settings = make_carla_settings(args)
+    self._carla_settings = make_carla_settings()
     self._enable_autopilot = True
     self._is_on_reverse = False
     self._city_name = MAP_NAME
@@ -80,12 +104,17 @@ class CarlaGame(object):
     self.measurements = None
     self.enabled_commands = []
     self.vehicle_distance_threshold = 30
-    self.traffic_light_distance_threshold = 15
+    self.traffic_light_distance_threshold = 30
     self.pedestrian_distance_threshold = 10
     self.speed_limit_distance_threshold = 20
     self.lane_tolerance = 0.00002
 
+# === execute ===
   def execute(self):
+"""
+Setup a new instance of the CARLA simulation and then continuously loop to
+control how the car drives
+"""
     self._initialize_game()
     try:
       while True:
@@ -93,24 +122,33 @@ class CarlaGame(object):
     except Exception as e:
       print(e.message, e.args)
 
+# === _initialize_game ===
   def _initialize_game(self):
+"""
+  Wrapper around events to happen when the simulation begins
+"""
     self._on_new_episode()
 
-# Callback function to be run whenever the game restarts
-
+# === _on_new_episode ===
   def _on_new_episode(self):
-    scene = self.client.load_settings(self._carla_settings)
-    number_of_player_starts = len(scene.player_start_spots)
-    # Same default start spot
+"""
+  Function that restarts the game and sets the car in a specific spot
+"""
     player_start = 1
     print('Starting new episode...')
     self.client.start_episode(player_start)
     self._is_on_reverse = False
+# **Enabled Commands**
+# This list stores the commands the user has sent to the car, which is then acted upon
+# in the on_loop function, after checking against driving rules.
     self.enabled_commands = []
 
-# Callback function to be run continuously throughout the game
-
+# === distance_between ===
   def distance_between(self, car_position, agent_position):
+"""
+  Simple algorithm for checking 3D distance between two objects.
+  Used to check the position of the car against various other objects.
+"""
     import math
     (car_x, car_y, car_z) = car_position
     (agent_x, agent_y, agent_z) = agent_position
@@ -119,57 +157,58 @@ class CarlaGame(object):
     sum_z_2 = (agent_z - car_z) ** 2
     return math.sqrt(sum_x_2 + sum_y_2 + sum_z_2)
 
+# === too_close_to ===
   def too_close_to(self, field, distance_threshold):
+"""
+Generic helper function which decides if the car position is too close to some type
+of object, `field` (within a `distance_threshold`).
+"""
     # Set the player position
     if self._city_name is not None:
       measurements = self.measurements
+      if measurements == None:
+        return False
       car_position = (measurements.player_measurements.transform.location.x,
         measurements.player_measurements.transform.location.y,
         measurements.player_measurements.transform.location.z)
       self._agent_positions = measurements.non_player_agents
-
+    # Iterate through the obstacles in the scene and check the ones of the class
+    # we care about (traffic lights, vehicles, pedestrians, etc.)
     for agent in self.measurements.non_player_agents:
       if agent.HasField(field):
         agent_position = (getattr(agent, field).transform.location.x,
           getattr(agent, field).transform.location.y,
           getattr(agent, field).transform.location.z)
         if self.distance_between(car_position, agent_position) < distance_threshold:
-          print(field)
           return True
     return False
 
+# === moving_out_of_lane ===
   def moving_out_of_lane(self):
-    # Lane Position (horizontal)
-    measurements = self.measurements
-    # Get the position of the car, in the X direction, in terms of sin(its angle)
-    lane_orientation = self._map.get_lane_orientation([
-        measurements.player_measurements.transform.location.x,
-        measurements.player_measurements.transform.location.y,
-        measurements.player_measurements.transform.location.z])
-    # print(lane_orientation)
-    if abs(lane_orientation[0]) > 1 - self.lane_tolerance:
-      return False
-    if abs(lane_orientation[1]) > 1 - self.lane_tolerance:
-      return False
-    return True
+"""
+Future function to critically check lane position (horizontal)
+"""
+    return False
 
-
+# === _on_loop ===
   def _on_loop(self):
+"""
+A function that constantly runs and checks the car against oncoming obstacles before
+executing either autonomous driving or driving influenced by a human controller
+"""
     self.measurements, sensor_data = self.client.read_data()
-
-    # Control
     if self.too_close_to('speed_limit_sign', self.speed_limit_distance_threshold):
-      # Just send socket to secondary monitor
+      # Just send socket to secondary monitor here. Functionality for future work.
       pass
 
     if self.too_close_to('traffic_light', self.traffic_light_distance_threshold):
-      # Send socket to secondary monitor
+      # Send socket to secondary monitor. Functionality for future work.
       # Let the car drive through the intersection
       self.client.send_control(self.measurements.player_measurements.autopilot_control)
       return
 
     if self.too_close_to('pedestrian', self.pedestrian_distance_threshold):
-      # Send socket to secondary monitor
+      # Send socket to secondary monitor. Functionality for future work.
       # Let the car stop and wait
       self.client.send_control(self.measurements.player_measurements.autopilot_control)
       return
@@ -177,39 +216,36 @@ class CarlaGame(object):
     number_of_commands = len(self.enabled_commands)
     if self._enable_autopilot and number_of_commands == 0:
       self.client.send_control(self.measurements.player_measurements.autopilot_control)
-    # else:
 
     lane_position_alert = self.moving_out_of_lane()
     if (number_of_commands > 0):
       for command in self.enabled_commands:
-        # if (self.too_close_to('vehicle', self.vehicle_distance_threshold) and
-        #     (command == self.accelerate)):
-        #   # Send socket to secondary monitor based on vehicle positioning
-        #   continue
+        # Send socket to secondary monitor based on vehicle positioning
+        if (self.too_close_to('vehicle', self.vehicle_distance_threshold) and
+            (command == self.accelerate)):
+          continue
+        # Send socket to secondary monitor based on lane positioning
+        # Don't allow lane position change
         if lane_position_alert and command == self.steer_left:
-          # Send socket to secondary monitor based on lane positioning
-          # Don't allow lane position change
           continue
         if lane_position_alert and command == self.steer_right:
-          # Send socket to secondary monitor based on lane positioning
-          # Don't allow lane position change
           continue
         command()
 
-# Interface Functions
+## CARLA Interface Functions
 # The following functions control the car based on the POST payload
 
-# Autopilot
+# === Autopilot ===
   def trigger_ap(self):
     self._enable_autopilot = not self._enable_autopilot
     self.clear()
 
-# Reset
+# === Reset ===
   def trigger_reset(self):
     self._on_new_episode()
     send_framer_message(SECONDARY_SCREEN_COMMANDS['reset'])
 
-# Left turning
+# === Turn Left ===
   def steer_left(self):
     control = VehicleControl()
     control.steer = max(control.steer - 0.01, -0.05)
@@ -217,17 +253,19 @@ class CarlaGame(object):
     control.throttle = self.measurements.player_measurements.autopilot_control.throttle
     self.client.send_control(control)
 
+# === Add left turn to enabled_commands ===
   def add_left(self):
-    if self.steer_left not in self.enabled_commands and not(self.moving_out_of_lane()):
+    if self.steer_left not in self.enabled_commands:
       self.enabled_commands.append(self.steer_left)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['left'])
 
+# === Remove left turn from enabled_commands ===
   def remove_left(self):
     if self.steer_left in self.enabled_commands:
       self.enabled_commands.remove(self.steer_left)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['left_stop'])
 
-# Right Turning
+# === Turn Right ===
   def steer_right(self):
     control = VehicleControl()
     control.steer = min(control.steer + 0.01, 0.05)
@@ -236,31 +274,35 @@ class CarlaGame(object):
     control.throttle = self.measurements.player_measurements.autopilot_control.throttle
     self.client.send_control(control)
 
+# === Add right turn to enabled_commands ===
   def add_right(self):
-    if self.steer_right not in self.enabled_commands and not(self.moving_out_of_lane()):
+    if self.steer_right not in self.enabled_commands:
       self.enabled_commands.append(self.steer_right)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['right'])
 
+# === Remove right turn from enabled_commands ===
   def remove_right(self):
     if self.steer_right in self.enabled_commands:
       self.enabled_commands.remove(self.steer_right)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['right_stop'])
 
-# Reverse
+# === Reverse ===
   def trigger_reverse(self):
     self._is_on_reverse = not self._is_on_reverse
 
-# Acceleration
+# === Add accelerate to enabled_commands ===
   def add_accel(self):
     if self.accelerate not in self.enabled_commands:
       self.enabled_commands.append(self.accelerate)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['speed_up'])
 
+# === Remove accelerate from enabled_commands ===
   def remove_accel(self):
     if self.accelerate in self.enabled_commands:
       self.enabled_commands.remove(self.accelerate)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['speed_up_stop'])
 
+# === Accelerate ===
   def accelerate(self):
     control = VehicleControl()
     control.throttle = 1.0
@@ -269,38 +311,47 @@ class CarlaGame(object):
     control.reverse = self._is_on_reverse
     self.client.send_control(control) 
 
-# Deceleration
+# === Add decelerate to enabled_commands ===
   def add_decel(self):
     if self.decelerate not in self.enabled_commands:
       self.enabled_commands.append(self.decelerate)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['slow_down'])
 
+# === Remove decelerate from enabled_commands ===
   def remove_decel(self):
     if self.decelerate in self.enabled_commands:
       self.enabled_commands.remove(self.decelerate)
       send_framer_message(SECONDARY_SCREEN_COMMANDS['slow_down_stop'])
 
+# === Decelerate ===
   def decelerate(self):
     control = VehicleControl()
     control.brake = 0.5
     control.reverse = self._is_on_reverse
     self.client.send_control(control)
 
-# Braking
+# === Add brake to enabled_commands ===
   def add_brake(self):
     self.enabled_commands = [self.throw_brake]
     send_framer_message(SECONDARY_SCREEN_COMMANDS['stop'])
 
+# === Brake ===
   def throw_brake(self):
     control = VehicleControl()
     control.hand_brake = True
     self.client.send_control(control) 
 
-# Clearing all commands
+# === Clear out all queued commands ===
   def clear(self):
     self.enabled_commands = []
 
+# === Main function for CARLA simulator instance to begin ===
 def main(obj):
+"""
+ Take in some optional arguments for configuring the simulator network settings
+ (specifically where the simulator should be listening for incoming connections
+ from Framer)
+"""
     argparser = argparse.ArgumentParser(
         description='CARLA Manual Control Client')
     argparser.add_argument(
@@ -326,13 +377,14 @@ def main(obj):
 
     logging.info('listening to server %s:%s', args.host, args.port)
 
-    print(__doc__)
-
     while True:
         try:
-            # Construct server here
-            # When response then start client
+          """
+          Construct server here
+          When we get a response then start client
+          """
             print("trying server", args.host, args.port, make_carla_client(args.host, args.port))
+            # Construct an instance of the CARLA simulator and save it to a global (threading)
             with make_carla_client(args.host, args.port) as client:
                 global game
                 game = CarlaGame(client, args)
@@ -345,16 +397,21 @@ def main(obj):
             logging.error(error)
             time.sleep(1)
 
-#!/usr/bin/env python
- 
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
+# === send_framer_message ===
 def send_framer_message(msg):
-  r = requests.get('http://localhost' + ':' + str(SECONDARY_PORT) + '/' + msg, data={'msg': msg})
+  """
+  A generic function to take a message to be sent as a socket via express and create a GET request
+  to the secondary monitor server
+  """
+  r = requests.get('http://' + SECONDARY_IP + ':' + str(SECONDARY_PORT) + '/' + msg, data={'msg': msg})
   print(r.status_code, r.reason)
  
-# HTTPRequestHandler class
+# # HTTP Server Class
 class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
+"""
+A basic HTTP server handling incoming commands via POST request payloads, and then controlling
+the autonomous vehicle in CARLA
+"""
     def __init__(self, request, client_address, server):
       super().__init__(request, client_address, server)
 
@@ -366,7 +423,7 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
       self.send_header("Access-Control-Allow-Headers", "X-Requested-With")
       self.end_headers() 
  
-  # GET
+  # === Handling GET Requests (testing) ===
     def do_GET(self):
       # Send response status code
       print("connection!")
@@ -382,37 +439,41 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
       self.wfile.write(bytes(message, "utf8"))
       return
 
+  # === Handling POST Requests (Car Control) ===
     def do_POST(self):
-      content_length = int(self.headers['Content-Length']) # <--- Gets the size of data
-      post_data = self.rfile.read(content_length) # <--- Gets the data itself
+      content_length = int(self.headers['Content-Length']) # Gets the size of data
+      post_data = self.rfile.read(content_length) # Gets the data itself
       content = post_data.decode("utf-8") 
       print(content)
       self.send_response(200)
       self.send_header('Content-type','text/html')
       self.send_header('Access-Control-Allow-Origin', '*')
       self.end_headers()
-      # Send message back to client to help in completing transaction
+      # Send message back to client to complete transaction
       message = "POST!"
       # Write content as utf-8 data
       self.wfile.write(bytes(message, "utf8"))
+"""
+Case on POST payloads to figure out what command to send to the car
+"""
       if content == 'testmsg':
           print("testing connection successful")
       if content == 'startserver':
           # Dispatch a thread to start a new game instance and save globally
           _thread.start_new_thread(main, (self,))
-      if content == 'enable_ap': #DONE
+      if content == 'enable_ap':
           game.trigger_ap()
-      if content == 'reset': #BROKEN
+      if content == 'reset':
           game.trigger_reset()
-      if content == 'left': #DONE
+      if content == 'left':
           game.add_left()
-      if content == 'left_stop': #DONE
+      if content == 'left_stop':
           game.remove_left()
-      if content == 'right': #DONE
+      if content == 'right':
           game.add_right()
-      if content == 'right_stop': #DONE
+      if content == 'right_stop':
           game.remove_right()
-      if content == 'reverse': #DONE
+      if content == 'reverse':
           game.trigger_reverse()
       if content == 'forward':
           game.add_accel()
@@ -423,15 +484,14 @@ class testHTTPServer_RequestHandler(BaseHTTPRequestHandler):
       if content == 'backward_stop':
           game.remove_decel()
       if content == 'stop':
-          game.add_brake()
-      # ADD CLEAR
+          game.add_brake()      
       if content == 'clear':
           game.clear()
       print("sending Response")
 
 def run():
   print('starting server...')
- 
+
   # Server settings
   server_address = (THIS_IP, THIS_PORT)
   httpd = HTTPServer(server_address, testHTTPServer_RequestHandler)
@@ -441,7 +501,6 @@ def run():
 
 
 if __name__ == '__main__':
-
     try:
         run()
     except KeyboardInterrupt:
